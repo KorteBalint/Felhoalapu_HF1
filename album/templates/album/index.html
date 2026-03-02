@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Photo Album</title>
+  <style>
+    :root {
+      font-family: Arial, sans-serif;
+      color-scheme: light;
+    }
+    body {
+      margin: 0;
+      background: #f3f5f7;
+      color: #1f2937;
+    }
+    main {
+      max-width: 960px;
+      margin: 2rem auto;
+      padding: 1rem;
+    }
+    h1 {
+      margin-top: 0;
+    }
+    .panel {
+      background: #fff;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+    .row {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    input, select, button {
+      padding: 0.5rem;
+      border-radius: 8px;
+      border: 1px solid #9ca3af;
+      font-size: 0.95rem;
+    }
+    button {
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+    }
+    button.delete {
+      background: #b91c1c;
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    li {
+      border-top: 1px solid #e5e7eb;
+      padding: 0.75rem 0;
+      display: flex;
+      justify-content: space-between;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    li:first-child {
+      border-top: none;
+    }
+    .error {
+      color: #b91c1c;
+      margin-top: 0.5rem;
+    }
+    .meta {
+      color: #4b5563;
+      font-size: 0.9rem;
+    }
+    img {
+      max-width: 100%;
+      border-radius: 8px;
+      border: 1px solid #d1d5db;
+      margin-top: 0.75rem;
+    }
+    a {
+      color: #1d4ed8;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Photo Album</h1>
+
+    <section class="panel">
+      <form action="{% url 'upload-photo' %}" method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="row">
+          <input type="text" name="name" maxlength="{{ max_name_length }}" placeholder="Photo name (max {{ max_name_length }})" required>
+          <input type="file" name="image" accept="image/*" required>
+          <input type="hidden" name="sort" value="{{ sort }}">
+          <input type="hidden" name="order" value="{{ order }}">
+          <button type="submit">Upload</button>
+        </div>
+      </form>
+      {% if error %}
+      <p class="error">{{ error }}</p>
+      {% endif %}
+    </section>
+
+    <section class="panel">
+      <form action="" method="get" class="row">
+        <label for="sort">Sort by</label>
+        <select id="sort" name="sort">
+          <option value="date" {% if sort == 'date' %}selected{% endif %}>Upload date</option>
+          <option value="name" {% if sort == 'name' %}selected{% endif %}>Name</option>
+        </select>
+        <label for="order">Order</label>
+        <select id="order" name="order">
+          <option value="desc" {% if order == 'desc' %}selected{% endif %}>Descending</option>
+          <option value="asc" {% if order == 'asc' %}selected{% endif %}>Ascending</option>
+        </select>
+        <button type="submit">Apply</button>
+      </form>
+
+      <ul>
+        {% for photo in photos %}
+        <li>
+          <div>
+            <a href="/?sort={{ sort }}&order={{ order }}&selected={{ photo.id }}">{{ photo.name }}</a>
+            <div class="meta">{{ photo.uploaded_at|date:"Y-m-d H:i" }}</div>
+          </div>
+          <form action="{% url 'delete-photo' photo.id %}" method="post">
+            {% csrf_token %}
+            <input type="hidden" name="sort" value="{{ sort }}">
+            <input type="hidden" name="order" value="{{ order }}">
+            <button type="submit" class="delete">Delete</button>
+          </form>
+        </li>
+        {% empty %}
+        <li>No photos uploaded yet.</li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    {% if selected_photo %}
+    <section class="panel">
+      <h2>{{ selected_photo.name }}</h2>
+      <div class="meta">Uploaded: {{ selected_photo.uploaded_at|date:"Y-m-d H:i" }}</div>
+      <img src="{% url 'photo-image' selected_photo.id %}" alt="{{ selected_photo.name }}">
+    </section>
+    {% endif %}
+  </main>
+</body>
+</html>
