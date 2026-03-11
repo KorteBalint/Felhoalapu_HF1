@@ -29,7 +29,7 @@ def index(request: HttpRequest) -> HttpResponse:
         "error": "",
         "max_name_length": MAX_NAME_LENGTH,
     }
-    return render(request, "album/index.html", context)
+    return render(request, "index.html", context)
 
 
 @require_POST
