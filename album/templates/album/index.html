@@ -1,0 +1,142 @@
+{% extends "album/base.html" %}
+
+{% block title %}Photo Archive{% endblock %}
+
+{% block content %}
+<div class="layout">
+  <div class="stack">
+    <section class="panel">
+      <h2 class="panel-title">Upload a new photo</h2>
+      <p class="panel-copy">
+        Each image keeps its title, upload timestamp, and uploader.
+      </p>
+
+      {% if request.user.is_authenticated %}
+      <form action="{% url 'upload-photo' %}" method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        {% if upload_form.non_field_errors %}
+        <ul class="form-errors">
+          {% for error in upload_form.non_field_errors %}
+          <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+
+        <div class="field-grid">
+          <div>
+            <label for="{{ upload_form.name.id_for_label }}">Photo name</label>
+            {{ upload_form.name }}
+            {% if upload_form.name.errors %}
+            {{ upload_form.name.errors }}
+            {% endif %}
+            <p class="helper-text">Maximum {{ max_name_length }} characters.</p>
+          </div>
+          <div>
+            <label for="{{ upload_form.image.id_for_label }}">Image file</label>
+            {{ upload_form.image }}
+            {% if upload_form.image.errors %}
+            {{ upload_form.image.errors }}
+            {% endif %}
+          </div>
+        </div>
+
+        <input type="hidden" name="sort" value="{{ sort }}">
+        <input type="hidden" name="order" value="{{ order }}">
+
+        <div class="inline-actions" style="margin-top: 1rem;">
+          <button type="submit" class="button">Upload photo</button>
+        </div>
+      </form>
+      {% else %}
+      <section class="panel auth-spotlight" style="margin-top: 1rem; padding: 1.1rem;">
+        <p class="panel-copy" style="margin-top: 0;">
+          Uploading and deletion are limited to authenticated users.
+        </p>
+        <div class="auth-links" style="margin-top: 0.9rem;">
+          <a href="{% url 'login' %}?next=/" class="button">Sign in</a>
+          <a href="{% url 'register' %}?next=/" class="button-quiet">Create account</a>
+        </div>
+      </section>
+      {% endif %}
+    </section>
+
+    <section class="panel">
+      <div class="sort-row">
+        <div>
+          <h2 class="panel-title">Archive list</h2>
+          <p class="panel-copy">Browse by chronology or alphabetical order.</p>
+        </div>
+      </div>
+
+      <form action="" method="get" class="field-grid" style="grid-template-columns: repeat(2, minmax(0, 1fr)) auto; align-items: end; margin-top: 1rem;">
+        <div>
+          <label for="sort">Sort by</label>
+          <select id="sort" name="sort">
+            <option value="date" {% if sort == 'date' %}selected{% endif %}>Upload date</option>
+            <option value="name" {% if sort == 'name' %}selected{% endif %}>Name</option>
+          </select>
+        </div>
+        <div>
+          <label for="order">Order</label>
+          <select id="order" name="order">
+            <option value="desc" {% if order == 'desc' %}selected{% endif %}>Descending</option>
+            <option value="asc" {% if order == 'asc' %}selected{% endif %}>Ascending</option>
+          </select>
+        </div>
+        <div>
+          <button type="submit" class="button-quiet" style="width: 100%;">Apply</button>
+        </div>
+      </form>
+
+      <ul class="photo-list">
+        {% for photo in photos %}
+        <li class="photo-card {% if selected_photo and selected_photo.pk == photo.pk %}active{% endif %}">
+          <a class="photo-link" href="/?sort={{ sort }}&order={{ order }}&selected={{ photo.pk }}">
+            <p class="photo-name">{{ photo.name }}</p>
+            <div class="photo-meta">
+              <span class="mono">{{ photo.uploaded_at|date:"Y-m-d H:i" }}</span>
+              <span class="chip">by {{ photo.uploaded_by.username }}</span>
+            </div>
+          </a>
+          {% if request.user.is_authenticated %}
+          <form action="{% url 'delete-photo' photo.pk %}" method="post" class="inline">
+            {% csrf_token %}
+            <input type="hidden" name="sort" value="{{ sort }}">
+            <input type="hidden" name="order" value="{{ order }}">
+            <button type="submit" class="danger-button">Delete</button>
+          </form>
+          {% endif %}
+        </li>
+        {% empty %}
+        <li class="photo-card">
+          <div>
+            <p class="photo-name">No photos yet</p>
+            <p class="panel-copy">Upload the first image to start the archive.</p>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+  </div>
+
+  <section class="panel">
+    {% if selected_photo %}
+    <p class="eyebrow">Preview</p>
+    <h2 class="panel-title">{{ selected_photo.name }}</h2>
+    <div class="photo-meta" style="margin-top: 0.7rem;">
+      <span class="mono">{{ selected_photo.uploaded_at|date:"Y-m-d H:i" }}</span>
+      <span class="chip">uploaded by {{ selected_photo.uploaded_by.username }}</span>
+    </div>
+    <div class="preview-frame">
+      <img src="{% url 'photo-image' selected_photo.pk %}" alt="{{ selected_photo.name }}">
+    </div>
+    {% else %}
+    <p class="eyebrow">Preview</p>
+    <h2 class="panel-title">Select a photo</h2>
+    <div class="preview-placeholder">
+      Click a list entry to load its image here. Sorting keeps the current archive order without losing the preview workflow.
+    </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

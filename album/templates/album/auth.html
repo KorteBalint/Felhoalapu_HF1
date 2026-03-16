@@ -1,0 +1,45 @@
+{% extends "album/base.html" %}
+
+{% block title %}{{ page_title }} | Photo Archive{% endblock %}
+
+{% block content %}
+<section class="panel auth-stage">
+  <p class="eyebrow">{{ page_title }}</p>
+  <h2 class="panel-title">{{ heading }}</h2>
+  <p class="panel-copy">{{ subheading }}</p>
+
+  <form action="" method="post">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next_value }}">
+    {% if form.non_field_errors %}
+    <ul class="form-errors" style="margin-top: 1rem;">
+      {% for error in form.non_field_errors %}
+      <li>{{ error }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    <div class="field-grid">
+      {% for field in form %}
+      <div>
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% if field.errors %}
+        {{ field.errors }}
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="inline-actions" style="margin-top: 1.1rem;">
+      <button type="submit" class="button">{{ submit_label }}</button>
+      <a href="{% url 'index' %}" class="button-quiet">Back to archive</a>
+    </div>
+  </form>
+
+  <p class="panel-copy" style="margin-top: 1.2rem;">
+    {{ alternate_label }}
+    <a href="{{ alternate_url }}">{{ alternate_cta }}</a>
+  </p>
+</section>
+{% endblock %}

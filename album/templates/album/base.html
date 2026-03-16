@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Photo Archive{% endblock %}</title>
+  <style>
+    :root {
+      --paper: #f7f1e3;
+      --ink: #1f1a17;
+      --muted: #6d665f;
+      --line: rgba(31, 26, 23, 0.14);
+      --panel: rgba(255, 250, 241, 0.88);
+      --accent: #bb4d2f;
+      --accent-deep: #8f351e;
+      --olive: #46513b;
+      --shadow: 0 20px 50px rgba(31, 26, 23, 0.12);
+      --radius: 24px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(187, 77, 47, 0.2), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(70, 81, 59, 0.18), transparent 30%),
+        linear-gradient(135deg, #efe3ca 0%, #f8f4eb 55%, #e8ddd0 100%);
+      font-family: "Palatino Linotype", "Book Antiqua", Palatino, serif;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(90deg, rgba(31, 26, 23, 0.04) 1px, transparent 1px),
+        linear-gradient(rgba(31, 26, 23, 0.04) 1px, transparent 1px);
+      background-size: 28px 28px;
+      opacity: 0.25;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    .page-shell {
+      width: min(1180px, calc(100vw - 2rem));
+      margin: 0 auto;
+      padding: 1.25rem 0 2.5rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .brand-block {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+    }
+
+    .brand-mark {
+      width: 72px;
+      aspect-ratio: 1;
+      border-radius: 24px;
+      border: 1px solid var(--line);
+      background:
+        linear-gradient(140deg, rgba(187, 77, 47, 0.92), rgba(143, 53, 30, 0.78)),
+        #fff;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .brand-mark::before,
+    .brand-mark::after {
+      content: "";
+      position: absolute;
+      border-radius: 999px;
+      background: rgba(255, 246, 234, 0.92);
+    }
+
+    .brand-mark::before {
+      width: 18px;
+      height: 18px;
+      top: 16px;
+      right: 14px;
+    }
+
+    .brand-mark::after {
+      width: 84px;
+      height: 84px;
+      left: -12px;
+      bottom: -34px;
+    }
+
+    .eyebrow {
+      margin: 0;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      font-size: 0.74rem;
+      color: var(--muted);
+    }
+
+    .brand-title {
+      margin: 0.15rem 0 0;
+      font-size: clamp(2rem, 3.8vw, 3.4rem);
+      line-height: 0.95;
+      font-weight: 700;
+    }
+
+    .brand-copy {
+      margin: 0.5rem 0 0;
+      max-width: 38rem;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.6;
+    }
+
+    .topbar-actions,
+    .inline-actions,
+    .sort-row,
+    .auth-links,
+    .photo-meta {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .chip,
+    .ghost-link,
+    .button,
+    .button-quiet,
+    .danger-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      border-radius: 999px;
+      text-decoration: none;
+      transition: transform 140ms ease, background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+    }
+
+    .chip {
+      border: 1px solid var(--line);
+      background: rgba(255, 250, 241, 0.65);
+      padding: 0.55rem 0.95rem;
+      color: var(--muted);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+      backdrop-filter: blur(10px);
+    }
+
+    .ghost-link,
+    .button,
+    .button-quiet,
+    .danger-button {
+      padding: 0.8rem 1.15rem;
+      border: 1px solid transparent;
+      cursor: pointer;
+    }
+
+    .button {
+      border-color: rgba(143, 53, 30, 0.25);
+      background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+      color: #fff7ef;
+      box-shadow: 0 18px 35px rgba(143, 53, 30, 0.22);
+    }
+
+    .button-quiet,
+    .ghost-link {
+      border-color: var(--line);
+      background: rgba(255, 250, 241, 0.65);
+      color: var(--ink);
+    }
+
+    .danger-button {
+      border-color: rgba(143, 53, 30, 0.16);
+      background: rgba(143, 53, 30, 0.08);
+      color: var(--accent-deep);
+    }
+
+    .ghost-link:hover,
+    .button:hover,
+    .button-quiet:hover,
+    .danger-button:hover,
+    .photo-link:hover {
+      transform: translateY(-1px);
+    }
+
+    .layout {
+      display: grid;
+      gap: 1.25rem;
+      grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 1.4rem;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px);
+      animation: lift-in 320ms ease both;
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 1.5rem;
+      line-height: 1.1;
+    }
+
+    .panel-copy {
+      margin: 0.5rem 0 0;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .stack {
+      display: grid;
+      gap: 1.25rem;
+    }
+
+    .field-grid {
+      display: grid;
+      gap: 0.95rem;
+      margin-top: 1.15rem;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 0.35rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
+    input,
+    select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 0.9rem 1rem;
+      background: rgba(255, 255, 255, 0.72);
+      color: var(--ink);
+    }
+
+    input:focus,
+    select:focus {
+      outline: 2px solid rgba(187, 77, 47, 0.18);
+      border-color: rgba(187, 77, 47, 0.35);
+    }
+
+    .errorlist,
+    .form-errors {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      color: var(--accent-deep);
+      font-size: 0.94rem;
+      line-height: 1.45;
+    }
+
+    .helper-text {
+      margin: 0.45rem 0 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .photo-list {
+      list-style: none;
+      margin: 1.2rem 0 0;
+      padding: 0;
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    .photo-card {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 0.75rem;
+      align-items: center;
+      padding: 0.9rem;
+      border-radius: 18px;
+      border: 1px solid rgba(31, 26, 23, 0.08);
+      background: rgba(255, 255, 255, 0.54);
+    }
+
+    .photo-card.active {
+      border-color: rgba(187, 77, 47, 0.25);
+      background: linear-gradient(135deg, rgba(255, 247, 241, 0.95), rgba(255, 255, 255, 0.76));
+    }
+
+    .photo-link {
+      text-decoration: none;
+      color: inherit;
+      display: block;
+    }
+
+    .photo-name {
+      margin: 0;
+      font-size: 1.1rem;
+    }
+
+    .mono {
+      font-family: "Courier New", Courier, monospace;
+      letter-spacing: 0.04em;
+      font-size: 0.83rem;
+      color: var(--muted);
+    }
+
+    .preview-frame {
+      position: relative;
+      margin-top: 1.2rem;
+      border-radius: 24px;
+      overflow: hidden;
+      background: rgba(31, 26, 23, 0.06);
+      min-height: 360px;
+      border: 1px solid rgba(31, 26, 23, 0.08);
+    }
+
+    .preview-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .preview-placeholder {
+      min-height: 360px;
+      display: grid;
+      place-items: center;
+      padding: 2rem;
+      text-align: center;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .auth-spotlight {
+      background: linear-gradient(135deg, rgba(70, 81, 59, 0.14), rgba(255, 250, 241, 0.78));
+      border: 1px solid rgba(70, 81, 59, 0.16);
+    }
+
+    .auth-stage {
+      max-width: 520px;
+      margin: 4rem auto 2rem;
+    }
+
+    form.inline {
+      display: inline;
+      margin: 0;
+    }
+
+    @keyframes lift-in {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @media (max-width: 900px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .topbar {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-shell">
+    <header class="topbar">
+      <div class="brand-block">
+        <div class="brand-mark" aria-hidden="true"></div>
+        <div>
+          <p class="eyebrow">Photo Album by Bálint Körtélyesi</p>
+          <h1 class="brand-title">Photo Archive</h1>
+          <p class="brand-copy">
+            A shared catalog for named photographs with searchable chronology, live previews, and authenticated editing.
+          </p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        {% if request.user.is_authenticated %}
+        <span class="chip">Signed in as {{ request.user.username }}</span>
+        <form action="{% url 'logout' %}" method="post" class="inline">
+          {% csrf_token %}
+          <button type="submit" class="button-quiet">Sign out</button>
+        </form>
+        {% else %}
+        <a href="{% url 'login' %}" class="ghost-link">Sign in</a>
+        <a href="{% url 'register' %}" class="button">Create account</a>
+        {% endif %}
+      </div>
+    </header>
+
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>
