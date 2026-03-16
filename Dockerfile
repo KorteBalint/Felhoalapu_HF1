@@ -18,6 +18,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 COPY --from=builder /app/.venv /app/.venv
 COPY . .
 
+RUN chmod -R g=u /app
+
 EXPOSE 8000
 
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+CMD ["./scripts/start.sh"]

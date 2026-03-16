@@ -45,6 +45,12 @@ def env_bool(name: str, default: bool) -> bool:
 
 
 def build_database_config() -> dict[str, object]:
+    if env_bool('USE_SQLITE', False):
+        return {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+
     if os.getenv('POSTGRES_DB'):
         return {
             'ENGINE': 'django.db.backends.postgresql',
@@ -81,6 +87,17 @@ ALLOWED_HOSTS = [
     ).split(",")
     if host.strip()
 ]
+
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
+USE_X_FORWARDED_HOST = env_bool("USE_X_FORWARDED_HOST", True)
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", not DEBUG)
+CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", not DEBUG)
 
 
 # Application definition
@@ -148,6 +165,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 

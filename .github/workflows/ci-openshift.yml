@@ -1,0 +1,66 @@
+name: CI and OpenShift Deploy
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: openshift-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run Django tests
+        env:
+          SECRET_KEY: github-actions-test-secret
+          USE_SQLITE: "1"
+        run: uv run python manage.py test
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    if: github.ref == 'refs/heads/master'
+    steps:
+      - name: Install oc
+        uses: redhat-actions/oc-installer@v1
+
+      - name: Log in to OpenShift
+        uses: redhat-actions/oc-login@v1
+        with:
+          openshift_server_url: ${{ secrets.OPENSHIFT_SERVER }}
+          openshift_token: ${{ secrets.OPENSHIFT_TOKEN }}
+          namespace: ${{ secrets.OPENSHIFT_NAMESPACE }}
+
+      - name: Trigger build and wait for rollout
+        env:
+          APP_NAME: ${{ vars.OPENSHIFT_APP_NAME }}
+          BUILDCONFIG_NAME: ${{ vars.OPENSHIFT_BUILDCONFIG }}
+        run: |
+          if [ -z "$APP_NAME" ]; then
+            echo "Repository variable OPENSHIFT_APP_NAME is required."
+            exit 1
+          fi
+
+          if [ -z "$BUILDCONFIG_NAME" ]; then
+            BUILDCONFIG_NAME="$APP_NAME"
+          fi
+
+          oc start-build "$BUILDCONFIG_NAME" --wait --follow
+          oc rollout status "dc/$APP_NAME" --watch=true
