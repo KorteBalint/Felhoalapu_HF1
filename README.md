@@ -15,6 +15,11 @@ Finished Django photo album implementation with:
 - Nicer UI (by gpt-5.4 using [frontend-design skill](https://github.com/anthropics/claude-code/blob/main/plugins/frontend-design/skills/frontend-design/SKILL.md))
 
 
+#### Pods running in OKD:
+![pods_lab2.png](./img/pods_lab2.png)
+
+
+
 ### Documentation
 
 #### Architecture
