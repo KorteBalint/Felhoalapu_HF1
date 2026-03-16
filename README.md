@@ -12,10 +12,10 @@ Django photo album implementation with:
 
 - [x] Auth (registration, login, logout)
 - [x] Restrict upload/delete to authenticated users only
-- [ ] Deploy on BME OpenShift (OKD)
+- [x] Deploy on BME OpenShift (OKD)
 - [x] Persistent database (PostgreSQL instead of in-memory storage)
 - [x] Separate app and database layers for scalable deployment
-- [ ] Configure automatic GitHub-triggered build/deploy pipeline
+- [x] Configure automatic GitHub-triggered build/deploy pipeline
 - [x] Add tests for required upload/delete/list/sort/auth flows
 - [x] Nicer UI
 
