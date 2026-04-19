@@ -1,5 +1,8 @@
 # Felhoalapu_HF1
 
+## Lab 3
+
+
 ## Lab 2
 
 Finished Django photo album implementation with:
@@ -26,7 +29,7 @@ Finished Django photo album implementation with:
 
 - Backend: Django web application, which implements the user interface and business logic.
 - Data layer: PostgreSQL is used for persistent storage; uploaded images and their metadata are stored in the database.
-- Runtime: the application runs in a container and is served by Gunicorn; database migrations are applied during startup.
+- Runtime: the application runs in a container and is served by Gunicorn; database migrations are applied during startup. (not since Lab 3)
 - Configuration: runtime settings are provided through environment variables, including secret key, host settings, and database connection parameters.
 
 #### Tech Stack

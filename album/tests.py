@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
@@ -57,6 +59,25 @@ class AlbumViewsTests(TestCase):
         self.assertRedirects(logout_response, '/')
         index_response = self.client.get('/')
         self.assertFalse(index_response.context['user'].is_authenticated)
+
+    def test_livez_returns_ok(self) -> None:
+        response = self.client.get('/healthz/live/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b'ok')
+
+    def test_readyz_returns_ok_when_database_is_available(self) -> None:
+        response = self.client.get('/healthz/ready/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b'ok')
+
+    def test_readyz_returns_503_when_database_is_unavailable(self) -> None:
+        with patch('album.views.connection.cursor', side_effect=Exception('database unavailable')):
+            response = self.client.get('/healthz/ready/')
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.content, b'database unavailable')
 
     def test_upload_requires_authentication(self) -> None:
         response = self.client.post(

@@ -2,6 +2,7 @@ from urllib.parse import urlencode
 
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
+from django.db import connection
 from django.db.models.functions import Lower
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -13,6 +14,23 @@ from .forms import AlbumAuthenticationForm, PhotoUploadForm, SignUpForm
 from .models import Photo
 
 MAX_NAME_LENGTH = Photo._meta.get_field("name").max_length
+
+
+@require_GET
+def livez(request: HttpRequest) -> HttpResponse:
+    return HttpResponse("ok", content_type="text/plain")
+
+
+@require_GET
+def readyz(request: HttpRequest) -> HttpResponse:
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+    except Exception:
+        return HttpResponse("database unavailable", status=503, content_type="text/plain")
+
+    return HttpResponse("ok", content_type="text/plain")
 
 
 def _normalize_sort(sort: str | None) -> str:
