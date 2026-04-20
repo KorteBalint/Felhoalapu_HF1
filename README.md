@@ -2,6 +2,21 @@
 
 ## Lab 3
 
+My loadtest report can be found in [loadtest_report.md](loadtest/loadtest_report.md)
+A summary of the configuration can be found in [scaling_configuration.md](loadtest/scaling_configuration.md)
+
+I reran the test without raising AssertionErrors on registration:
+[new locust data report](loadtest/Locust_2026-04-20-02h46_locustfile.py_https___photo-album-uyrobl-photo-album-uyrobl.apps.okd.fured.cloud.bme.hu.html)
+
+Now the number of users is `30` and stable, pods scale to `5`, Failure ratio is `0.6`. But I will not update my report, because I think the lesson that I learnt is more important: **maybe it's not my app that's wrong but my test**.
+
+
+Final Locust charts:
+
+![locust_final_charts.png](img/lab3/locust_final_charts.png)
+
+
+(If requested I will update [scaling_configuration.md](loadtest/scaling_configuration.md))
 
 ## Lab 2
 

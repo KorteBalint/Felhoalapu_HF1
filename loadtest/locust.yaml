@@ -6,12 +6,14 @@ data:
   locustfile.py: |
     from __future__ import annotations
 
+    import time
     from html.parser import HTMLParser
     from io import BytesIO
     from itertools import count
     from typing import Any
     from urllib.parse import parse_qs, urlparse
 
+    from gevent import sleep
     from locust import HttpUser, between, task
 
 
@@ -24,6 +26,8 @@ data:
 
     USER_COUNTER = count(1)
     PHOTO_COUNTER = count(1)
+    RUN_TOKEN = str(int(time.time() * 1000))
+    BOOTSTRAP_RETRY_SECONDS = 2.0
 
 
     class FormParser(HTMLParser):
@@ -77,11 +81,12 @@ data:
 
         def on_start(self) -> None:
             user_id = next(USER_COUNTER)
-            self.username = f"locust-user-{user_id}"
+            self.username = f"locust-user-{RUN_TOKEN}-{user_id}"
             self.password = "Secretpass123"
-            self._register()
+            while not self._register():
+                sleep(BOOTSTRAP_RETRY_SECONDS)
 
-        def _register(self) -> None:
+        def _register(self) -> bool:
             with self.client.get(
                 "/register/",
                 name="GET /register/",
@@ -89,13 +94,13 @@ data:
             ) as response:
                 if response.status_code != 200:
                     response.failure(f"Expected register page, got {response.status_code}")
-                    raise AssertionError("Register page unavailable")
+                    return False
                 form = find_form(response.text, method="post")
                 csrf_token = form["inputs"].get("csrfmiddlewaretoken", "")
                 next_value = form["inputs"].get("next", "/")
                 if not csrf_token:
                     response.failure("Register form did not contain csrfmiddlewaretoken")
-                    raise AssertionError("Missing register csrf token")
+                    return False
                 response.success()
 
             payload = {
@@ -116,25 +121,26 @@ data:
             ) as response:
                 if response.status_code not in {302, 303}:
                     response.failure(f"Registration failed with status {response.status_code}")
-                    raise AssertionError("Registration failed")
+                    return False
                 response.success()
+                return True
 
-        def _open_archive(self) -> tuple[str, dict[str, Any]]:
+        def _open_archive(self) -> tuple[str, dict[str, Any]] | None:
             with self.client.get("/", name="GET /", catch_response=True) as response:
                 if response.status_code != 200:
                     response.failure(f"Expected archive page, got {response.status_code}")
-                    raise AssertionError("Archive page unavailable")
+                    return None
                 form = find_form(response.text, action="/photos/upload/")
                 csrf_token = form["inputs"].get("csrfmiddlewaretoken", "")
                 if not csrf_token:
                     response.failure("Upload form did not contain csrfmiddlewaretoken")
-                    raise AssertionError("Missing upload csrf token")
+                    return None
                 response.success()
                 return csrf_token, form
 
-        def _upload_photo(self, csrf_token: str, upload_form: dict[str, Any]) -> int:
+        def _upload_photo(self, csrf_token: str, upload_form: dict[str, Any]) -> int | None:
             photo_id = next(PHOTO_COUNTER)
-            photo_name = f"locust-photo-{photo_id}"
+            photo_name = f"locust-photo-{RUN_TOKEN}-{photo_id}"
             image_file = BytesIO(PNG_BYTES)
             image_file.name = f"{photo_name}.png"
 
@@ -160,34 +166,34 @@ data:
             ) as response:
                 if response.status_code not in {302, 303}:
                     response.failure(f"Upload failed with status {response.status_code}")
-                    raise AssertionError("Upload failed")
+                    return None
 
                 location = response.headers.get("Location", "")
                 selected_values = parse_qs(urlparse(location).query).get("selected", [])
                 if not selected_values:
                     response.failure("Upload redirect did not contain selected photo id")
-                    raise AssertionError("Missing selected photo id")
+                    return None
 
                 response.success()
                 return int(selected_values[0])
 
-        def _open_preview(self, photo_id: int) -> str:
+        def _open_preview(self, photo_id: int) -> str | None:
             preview_path = f"/?sort=date&order=desc&selected={photo_id}"
             with self.client.get(preview_path, name="GET /?selected=", catch_response=True) as response:
                 if response.status_code != 200:
                     response.failure(f"Preview page failed with status {response.status_code}")
-                    raise AssertionError("Preview failed")
+                    return None
 
                 form = find_form(response.text, action=f"/photos/{photo_id}/delete/")
                 csrf_token = form["inputs"].get("csrfmiddlewaretoken", "")
                 if not csrf_token:
                     response.failure("Delete form did not contain csrfmiddlewaretoken")
-                    raise AssertionError("Missing delete csrf token")
+                    return None
 
                 response.success()
                 return csrf_token
 
-        def _fetch_image(self, photo_id: int) -> None:
+        def _fetch_image(self, photo_id: int) -> bool:
             with self.client.get(
                 f"/photos/{photo_id}/image/",
                 name="GET /photos/:id/image/",
@@ -195,10 +201,11 @@ data:
             ) as response:
                 if response.status_code != 200:
                     response.failure(f"Image fetch failed with status {response.status_code}")
-                    raise AssertionError("Image fetch failed")
+                    return False
                 response.success()
+                return True
 
-        def _delete_photo(self, photo_id: int, csrf_token: str) -> None:
+        def _delete_photo(self, photo_id: int, csrf_token: str) -> bool:
             payload = {
                 "csrfmiddlewaretoken": csrf_token,
                 "sort": "date",
@@ -215,17 +222,25 @@ data:
             ) as response:
                 if response.status_code not in {302, 303}:
                     response.failure(f"Delete failed with status {response.status_code}")
-                    raise AssertionError("Delete failed")
+                    return False
                 response.success()
+                return True
 
         @task
         def upload_preview_fetch_and_delete(self) -> None:
-            csrf_token, upload_form = self._open_archive()
+            archive = self._open_archive()
+            if archive is None:
+                return
+            csrf_token, upload_form = archive
             photo_id = self._upload_photo(csrf_token, upload_form)
+            if photo_id is None:
+                return
             delete_csrf = self._open_preview(photo_id)
-            self._fetch_image(photo_id)
+            if delete_csrf is None:
+                return
+            if not self._fetch_image(photo_id):
+                return
             self._delete_photo(photo_id, delete_csrf)
-
 
 ---
 apiVersion: apps/v1
