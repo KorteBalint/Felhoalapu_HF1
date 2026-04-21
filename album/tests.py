@@ -73,11 +73,22 @@ class AlbumViewsTests(TestCase):
         self.assertEqual(response.content, b'ok')
 
     def test_readyz_returns_503_when_database_is_unavailable(self) -> None:
-        with patch('album.views.connection.cursor', side_effect=Exception('database unavailable')):
+        with patch('album.views.connection.ensure_connection', side_effect=Exception('database unavailable')):
             response = self.client.get('/healthz/ready/')
 
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.content, b'database unavailable')
+
+    def test_readyz_returns_503_when_migrations_are_pending(self) -> None:
+        with patch('album.views.MigrationExecutor') as migration_executor:
+            executor = migration_executor.return_value
+            executor.loader.graph.leaf_nodes.return_value = [('album', '0002_store_photos_in_database')]
+            executor.migration_plan.return_value = [('album.0002_store_photos_in_database', False)]
+
+            response = self.client.get('/healthz/ready/')
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.content, b'migrations pending')
 
     def test_upload_requires_authentication(self) -> None:
         response = self.client.post(

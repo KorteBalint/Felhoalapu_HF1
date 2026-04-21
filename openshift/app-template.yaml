@@ -3,7 +3,7 @@ kind: Template
 metadata:
   name: django-photo-album
   annotations:
-    description: Build and deploy the Django photo album application on OpenShift.
+    description: Build and deploy the Django photo album application and its PostgreSQL database on OpenShift.
 parameters:
   - name: APP_NAME
     value: felhoalapu-hf1
@@ -13,16 +13,8 @@ parameters:
   - name: GIT_REF
     value: master
     required: true
-  - name: GITHUB_WEBHOOK_SECRET
-    generate: expression
-    from: "[a-zA-Z0-9]{40}"
   - name: SECRET_KEY
-    generate: expression
-    from: "[a-zA-Z0-9]{50}"
-  - name: POSTGRES_HOST
     required: true
-  - name: POSTGRES_PORT
-    value: "5432"
   - name: POSTGRES_DB
     value: album
     required: true
@@ -30,8 +22,12 @@ parameters:
     value: album
     required: true
   - name: POSTGRES_PASSWORD
-    generate: expression
-    from: "[a-zA-Z0-9]{24}"
+    required: true
+  - name: POSTGRES_IMAGE
+    required: true
+  - name: POSTGRES_STORAGE_SIZE
+    value: 1Gi
+    required: true
   - name: ALLOWED_HOSTS
     value: "*"
     required: true
@@ -42,49 +38,54 @@ parameters:
   - name: POSTGRES_CONN_MAX_AGE
     value: "120"
   - name: CPU_REQUEST
-    value: "50m"
+    value: 50m
   - name: CPU_LIMIT
-    value: "250m"
+    value: 250m
   - name: MEMORY_REQUEST
-    value: "256Mi"
+    value: 256Mi
   - name: MEMORY_LIMIT
-    value: "512Mi"
+    value: 512Mi
+  - name: POSTGRES_CPU_REQUEST
+    value: 50m
+  - name: POSTGRES_CPU_LIMIT
+    value: 250m
+  - name: POSTGRES_MEMORY_REQUEST
+    value: 256Mi
+  - name: POSTGRES_MEMORY_LIMIT
+    value: 512Mi
 
 objects:
   - apiVersion: v1
     kind: Secret
     metadata:
       name: ${APP_NAME}-app-env
+      labels:
+        app: ${APP_NAME}
     type: Opaque
     stringData:
-      SECRET_KEY: ${SECRET_KEY}
-      POSTGRES_HOST: ${POSTGRES_HOST}
-      POSTGRES_PORT: ${POSTGRES_PORT}
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-  - apiVersion: v1
-    kind: Secret
-    metadata:
-      name: ${APP_NAME}-github-webhook
-    type: Opaque
-    stringData:
-      WebHookSecretKey: ${GITHUB_WEBHOOK_SECRET}
+      SECRET_KEY: "${SECRET_KEY}"
+      POSTGRES_DB: "${POSTGRES_DB}"
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
   - apiVersion: image.openshift.io/v1
     kind: ImageStream
     metadata:
       name: ${APP_NAME}
+      labels:
+        app: ${APP_NAME}
   - apiVersion: build.openshift.io/v1
     kind: BuildConfig
     metadata:
       name: ${APP_NAME}
+      labels:
+        app: ${APP_NAME}
     spec:
       runPolicy: SerialLatestOnly
       source:
         type: Git
         git:
-          uri: ${GIT_REPO_URL}
-          ref: ${GIT_REF}
+          uri: "${GIT_REPO_URL}"
+          ref: "${GIT_REF}"
       strategy:
         type: Docker
         dockerStrategy:
@@ -92,17 +93,160 @@ objects:
       output:
         to:
           kind: ImageStreamTag
-          name: ${APP_NAME}:latest
-      triggers:
-        - type: ConfigChange
-        - type: GitHub
-          github:
-            secretReference:
-              name: ${APP_NAME}-github-webhook
+          name: "${APP_NAME}:latest"
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: ${APP_NAME}-postgres
+      labels:
+        app: ${APP_NAME}
+        component: postgres
+    spec:
+      selector:
+        app: ${APP_NAME}
+        component: postgres
+      ports:
+        - name: postgres
+          port: 5432
+          targetPort: 5432
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: ${APP_NAME}-postgres-data
+      labels:
+        app: ${APP_NAME}
+        component: postgres
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: "${POSTGRES_STORAGE_SIZE}"
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: ${APP_NAME}-postgres
+      labels:
+        app: ${APP_NAME}
+        component: postgres
+    spec:
+      replicas: 1
+      strategy:
+        type: Recreate
+      selector:
+        matchLabels:
+          app: ${APP_NAME}
+          component: postgres
+      template:
+        metadata:
+          labels:
+            app: ${APP_NAME}
+            component: postgres
+        spec:
+          containers:
+            - name: postgres
+              image: "${POSTGRES_IMAGE}"
+              imagePullPolicy: Always
+              ports:
+                - containerPort: 5432
+                  protocol: TCP
+              env:
+                - name: POSTGRES_DB
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${APP_NAME}-app-env
+                      key: POSTGRES_DB
+                - name: POSTGRES_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${APP_NAME}-app-env
+                      key: POSTGRES_USER
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${APP_NAME}-app-env
+                      key: POSTGRES_PASSWORD
+                - name: POSTGRESQL_DATABASE
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${APP_NAME}-app-env
+                      key: POSTGRES_DB
+                - name: POSTGRESQL_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${APP_NAME}-app-env
+                      key: POSTGRES_USER
+                - name: POSTGRESQL_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: ${APP_NAME}-app-env
+                      key: POSTGRES_PASSWORD
+              readinessProbe:
+                tcpSocket:
+                  port: 5432
+                initialDelaySeconds: 5
+                periodSeconds: 10
+                timeoutSeconds: 3
+                failureThreshold: 6
+              livenessProbe:
+                tcpSocket:
+                  port: 5432
+                initialDelaySeconds: 30
+                periodSeconds: 20
+                timeoutSeconds: 3
+                failureThreshold: 3
+              startupProbe:
+                tcpSocket:
+                  port: 5432
+                periodSeconds: 5
+                timeoutSeconds: 3
+                failureThreshold: 24
+              resources:
+                requests:
+                  cpu: "${POSTGRES_CPU_REQUEST}"
+                  memory: "${POSTGRES_MEMORY_REQUEST}"
+                limits:
+                  cpu: "${POSTGRES_CPU_LIMIT}"
+                  memory: "${POSTGRES_MEMORY_LIMIT}"
+              volumeMounts:
+                - name: postgres-data
+                  mountPath: /var/lib/pgsql/data
+                - name: postgres-data
+                  mountPath: /var/lib/postgresql/data
+          volumes:
+            - name: postgres-data
+              persistentVolumeClaim:
+                claimName: ${APP_NAME}-postgres-data
+  - apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: ${APP_NAME}-postgres
+      labels:
+        app: ${APP_NAME}
+        component: postgres
+    spec:
+      podSelector:
+        matchLabels:
+          app: ${APP_NAME}
+          component: postgres
+      policyTypes:
+        - Ingress
+      ingress:
+        - from:
+            - podSelector:
+                matchLabels:
+                  app: ${APP_NAME}
+                  component: web
+          ports:
+            - protocol: TCP
+              port: 5432
   - apiVersion: v1
     kind: Service
     metadata:
       name: ${APP_NAME}
+      labels:
+        app: ${APP_NAME}
+        component: web
     spec:
       selector:
         app: ${APP_NAME}
@@ -115,6 +259,9 @@ objects:
     kind: Route
     metadata:
       name: ${APP_NAME}
+      labels:
+        app: ${APP_NAME}
+        component: web
     spec:
       to:
         kind: Service
@@ -128,10 +275,14 @@ objects:
     kind: DeploymentConfig
     metadata:
       name: ${APP_NAME}
+      labels:
+        app: ${APP_NAME}
+        component: web
     spec:
       replicas: 1
       selector:
         app: ${APP_NAME}
+        component: web
         deploymentconfig: ${APP_NAME}
       strategy:
         type: Rolling
@@ -144,11 +295,12 @@ objects:
               - web
             from:
               kind: ImageStreamTag
-              name: ${APP_NAME}:latest
+              name: "${APP_NAME}:latest"
       template:
         metadata:
           labels:
             app: ${APP_NAME}
+            component: web
             deploymentconfig: ${APP_NAME}
         spec:
           containers:
@@ -164,28 +316,22 @@ objects:
                 - name: DEBUG
                   value: "False"
                 - name: ALLOWED_HOSTS
-                  value: ${ALLOWED_HOSTS}
+                  value: "${ALLOWED_HOSTS}"
                 - name: CSRF_TRUSTED_ORIGINS
-                  value: ${CSRF_TRUSTED_ORIGINS}
+                  value: "${CSRF_TRUSTED_ORIGINS}"
                 - name: GUNICORN_WORKERS
-                  value: ${GUNICORN_WORKERS}
+                  value: "${GUNICORN_WORKERS}"
                 - name: POSTGRES_CONN_MAX_AGE
-                  value: ${POSTGRES_CONN_MAX_AGE}
+                  value: "${POSTGRES_CONN_MAX_AGE}"
+                - name: POSTGRES_HOST
+                  value: "${APP_NAME}-postgres"
+                - name: POSTGRES_PORT
+                  value: "5432"
                 - name: SECRET_KEY
                   valueFrom:
                     secretKeyRef:
                       name: ${APP_NAME}-app-env
                       key: SECRET_KEY
-                - name: POSTGRES_HOST
-                  valueFrom:
-                    secretKeyRef:
-                      name: ${APP_NAME}-app-env
-                      key: POSTGRES_HOST
-                - name: POSTGRES_PORT
-                  valueFrom:
-                    secretKeyRef:
-                      name: ${APP_NAME}-app-env
-                      key: POSTGRES_PORT
                 - name: POSTGRES_DB
                   valueFrom:
                     secretKeyRef:
@@ -226,15 +372,18 @@ objects:
                 failureThreshold: 12
               resources:
                 requests:
-                  cpu: ${CPU_REQUEST}
-                  memory: ${MEMORY_REQUEST}
+                  cpu: "${CPU_REQUEST}"
+                  memory: "${MEMORY_REQUEST}"
                 limits:
-                  cpu: ${CPU_LIMIT}
-                  memory: ${MEMORY_LIMIT}
+                  cpu: "${CPU_LIMIT}"
+                  memory: "${MEMORY_LIMIT}"
   - apiVersion: autoscaling/v2
     kind: HorizontalPodAutoscaler
     metadata:
       name: ${APP_NAME}
+      labels:
+        app: ${APP_NAME}
+        component: web
     spec:
       scaleTargetRef:
         apiVersion: apps.openshift.io/v1

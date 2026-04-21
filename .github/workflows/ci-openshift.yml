@@ -37,7 +37,32 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     if: github.ref == 'refs/heads/master'
+    env:
+      APP_NAME: ${{ vars.OPENSHIFT_APP_NAME }}
+      GIT_REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+      GIT_REF: ${{ github.ref_name }}
+      SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+      POSTGRES_DB: ${{ vars.OPENSHIFT_POSTGRES_DB }}
+      POSTGRES_USER: ${{ vars.OPENSHIFT_POSTGRES_USER }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      POSTGRES_IMAGE: ${{ vars.OPENSHIFT_POSTGRES_IMAGE }}
+      POSTGRES_STORAGE_SIZE: ${{ vars.OPENSHIFT_POSTGRES_STORAGE_SIZE || '1Gi' }}
+      ALLOWED_HOSTS: ${{ vars.OPENSHIFT_ALLOWED_HOSTS }}
+      CSRF_TRUSTED_ORIGINS: ${{ vars.OPENSHIFT_CSRF_TRUSTED_ORIGINS || '' }}
+      GUNICORN_WORKERS: ${{ vars.OPENSHIFT_GUNICORN_WORKERS || '2' }}
+      POSTGRES_CONN_MAX_AGE: ${{ vars.OPENSHIFT_POSTGRES_CONN_MAX_AGE || '120' }}
+      CPU_REQUEST: ${{ vars.OPENSHIFT_CPU_REQUEST || '50m' }}
+      CPU_LIMIT: ${{ vars.OPENSHIFT_CPU_LIMIT || '250m' }}
+      MEMORY_REQUEST: ${{ vars.OPENSHIFT_MEMORY_REQUEST || '256Mi' }}
+      MEMORY_LIMIT: ${{ vars.OPENSHIFT_MEMORY_LIMIT || '512Mi' }}
+      POSTGRES_CPU_REQUEST: ${{ vars.OPENSHIFT_POSTGRES_CPU_REQUEST || '50m' }}
+      POSTGRES_CPU_LIMIT: ${{ vars.OPENSHIFT_POSTGRES_CPU_LIMIT || '250m' }}
+      POSTGRES_MEMORY_REQUEST: ${{ vars.OPENSHIFT_POSTGRES_MEMORY_REQUEST || '256Mi' }}
+      POSTGRES_MEMORY_LIMIT: ${{ vars.OPENSHIFT_POSTGRES_MEMORY_LIMIT || '512Mi' }}
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
       - name: Install oc
         uses: redhat-actions/oc-installer@v1
 
@@ -48,19 +73,43 @@ jobs:
           openshift_token: ${{ secrets.OPENSHIFT_TOKEN }}
           namespace: ${{ secrets.OPENSHIFT_NAMESPACE }}
 
-      - name: Trigger build and wait for rollout
-        env:
-          APP_NAME: ${{ vars.OPENSHIFT_APP_NAME }}
-          BUILDCONFIG_NAME: ${{ vars.OPENSHIFT_BUILDCONFIG }}
+      - name: Reconcile OpenShift template
+        run: ./scripts/openshift/apply-template.sh
+
+      - name: Wait for PostgreSQL
+        run: ./scripts/openshift/wait-for-postgres.sh
+
+      - name: Build application image
+        run: oc start-build "bc/${APP_NAME}" --wait --follow
+
+      - name: Run database migrations
+        run: ./scripts/openshift/run-migrations.sh
+
+      - name: Wait for application rollout
+        run: oc rollout status "dc/${APP_NAME}" --watch=true
+
+      - name: Smoke check route health
         run: |
-          if [ -z "$APP_NAME" ]; then
-            echo "Repository variable OPENSHIFT_APP_NAME is required."
+          set -euo pipefail
+
+          route_host="$(oc get "route/${APP_NAME}" -o jsonpath='{.spec.host}')"
+          if [ -z "${route_host}" ]; then
+            echo "Route ${APP_NAME} does not have a host." >&2
             exit 1
           fi
 
-          if [ -z "$BUILDCONFIG_NAME" ]; then
-            BUILDCONFIG_NAME="$APP_NAME"
-          fi
+          for endpoint in live ready; do
+            passed=0
+            for attempt in $(seq 1 12); do
+              if curl --fail --silent --show-error "https://${route_host}/healthz/${endpoint}/" >/dev/null; then
+                passed=1
+                break
+              fi
+              sleep 5
+            done
 
-          oc start-build "$BUILDCONFIG_NAME" --wait --follow
-          oc rollout status "dc/$APP_NAME" --watch=true
+            if [ "${passed}" -ne 1 ]; then
+              echo "Smoke check failed for /healthz/${endpoint}/ on https://${route_host}." >&2
+              exit 1
+            fi
+          done

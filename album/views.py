@@ -4,6 +4,7 @@ from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.db import connection
 from django.db.models.functions import Lower
+from django.db.migrations.executor import MigrationExecutor
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -24,11 +25,15 @@ def livez(request: HttpRequest) -> HttpResponse:
 @require_GET
 def readyz(request: HttpRequest) -> HttpResponse:
     try:
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT 1")
-            cursor.fetchone()
+        connection.ensure_connection()
+        executor = MigrationExecutor(connection)
+        targets = executor.loader.graph.leaf_nodes()
+        plan = executor.migration_plan(targets)
     except Exception:
         return HttpResponse("database unavailable", status=503, content_type="text/plain")
+
+    if plan:
+        return HttpResponse("migrations pending", status=503, content_type="text/plain")
 
     return HttpResponse("ok", content_type="text/plain")
 
